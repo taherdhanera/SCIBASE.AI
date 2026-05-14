@@ -20,6 +20,10 @@ node scientific-bounty-review-integrity/demo.js
 
 The demo prints a reviewer-ready JSON decision record containing evidence hashes, conflict review IDs, scoring, payout readiness, payout splits, and the final audit hash.
 
+## Visual Demo
+
+Open `scientific-bounty-review-integrity/docs/demo.svg` for a privacy-safe walkthrough of the module flow. It uses only synthetic sample data and shows how a submission moves from evidence hashing through reviewer conflict checks, rubric scoring, payout readiness, and IP handoff.
+
 ## Run The Tests
 
 ```bash
