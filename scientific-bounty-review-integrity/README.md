@@ -24,6 +24,8 @@ The demo prints a reviewer-ready JSON decision record containing evidence hashes
 
 Open `scientific-bounty-review-integrity/docs/demo.svg` for a privacy-safe walkthrough of the module flow. It uses only synthetic sample data and shows how a submission moves from evidence hashing through reviewer conflict checks, rubric scoring, payout readiness, and IP handoff.
 
+For bounty review, the same walkthrough is also available as a short WebM demo video at `scientific-bounty-review-integrity/docs/demo.webm`.
+
 ## Run The Tests
 
 ```bash
