@@ -25,6 +25,8 @@ The demo prints a reviewer-ready JSON record with the artifact manifest, version
 
 Open `scientific-artifact-hosting-governance/docs/demo.svg` for a privacy-safe walkthrough of the module flow. It uses synthetic sample data only.
 
+For bounty review, the same walkthrough is also available as a short WebM demo video at `scientific-artifact-hosting-governance/docs/demo.webm`.
+
 ## Run The Tests
 
 ```bash
