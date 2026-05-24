@@ -15,14 +15,22 @@ const outputSpecs = [
   {
     artifactName: "demo.webm",
     mimeType: "video/webm;codecs=vp8",
-    outputPath: path.join(reportDir, "demo.webm")
+    outputPath: path.join(reportDir, "demo.webm"),
+    isValid(buffer) {
+      return buffer.length > 4 && buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
+    }
   },
   {
     artifactName: "demo.mp4",
     mimeType: "video/mp4;codecs=avc1",
-    outputPath: path.join(reportDir, "demo.mp4")
+    outputPath: path.join(reportDir, "demo.mp4"),
+    isValid(buffer) {
+      return buffer.length > 12 && buffer.subarray(4, 8).toString("ascii") === "ftyp";
+    }
   }
 ];
+
+const forceRecord = process.argv.includes("--record") || process.env.RECORD_DEMO_VIDEO === "1";
 
 const browserCandidates = [
   process.env.CHROME_PATH,
@@ -173,7 +181,25 @@ function buildHtml({ artifactName, mimeType }) {
 </html>`;
 }
 
+function verifyExistingVideo(spec) {
+  if (!fs.existsSync(spec.outputPath)) {
+    return false;
+  }
+
+  const buffer = fs.readFileSync(spec.outputPath);
+  if (!spec.isValid(buffer)) {
+    throw new Error(`${spec.artifactName} exists but does not have the expected container signature.`);
+  }
+
+  console.log(`Verified ${path.relative(process.cwd(), spec.outputPath)}`);
+  return true;
+}
+
 function recordDemo(spec) {
+  if (!forceRecord && verifyExistingVideo(spec)) {
+    return;
+  }
+
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "repository-owner-demo-"));
   const htmlPath = path.join(tempDir, "demo.html");
   const profileDir = path.join(tempDir, "profile");

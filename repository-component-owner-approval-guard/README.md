@@ -24,7 +24,7 @@ npm run demo:video
 
 ## Reviewer Artifacts
 
-`npm run demo` and `npm run demo:video` generate:
+`npm run demo` generates the structured reviewer packet. `npm run demo:video` verifies the committed video artifacts without rewriting them; use `RECORD_DEMO_VIDEO=1 node demo-video.js` to re-record locally.
 
 - `reports/summary.json`
 - `reports/reviewer-packet.md`
