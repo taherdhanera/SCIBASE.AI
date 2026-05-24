@@ -11,7 +11,18 @@ const result = evaluateRepositoryChanges({
 });
 
 const reportDir = path.join(__dirname, "reports");
-const outputPath = path.join(reportDir, "demo.webm");
+const outputSpecs = [
+  {
+    artifactName: "demo.webm",
+    mimeType: "video/webm;codecs=vp8",
+    outputPath: path.join(reportDir, "demo.webm")
+  },
+  {
+    artifactName: "demo.mp4",
+    mimeType: "video/mp4;codecs=avc1",
+    outputPath: path.join(reportDir, "demo.mp4")
+  }
+];
 
 const browserCandidates = [
   process.env.CHROME_PATH,
@@ -33,7 +44,8 @@ function fileUrl(filePath) {
   return `file:///${filePath.replace(/\\/g, "/")}`;
 }
 
-const html = String.raw`<!doctype html>
+function buildHtml({ artifactName, mimeType }) {
+  return String.raw`<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -51,12 +63,14 @@ const html = String.raw`<!doctype html>
     const canvas = document.getElementById("stage");
     const ctx = canvas.getContext("2d");
     const out = document.getElementById("out");
+    const artifactName = ${JSON.stringify(artifactName)};
+    const mimeType = ${JSON.stringify(mimeType)};
     const stats = ${JSON.stringify(result.summary)};
     const checks = [
       ["Component mapping", "Repository paths route to manuscript, data, code, notebooks, protocols, results, and metadata owners."],
       ["Owner quorum", "Protected merges require fresh eligible owner approval coverage for each touched component."],
       ["Restricted escalation", "Restricted data and protocol edits require privacy or IRB owner coverage."],
-      ["Reviewer artifacts", "summary.json, reviewer-packet.md, summary.svg, and demo.webm are generated locally."]
+      ["Reviewer artifacts", "summary.json, reviewer-packet.md, summary.svg, and " + artifactName + " are generated locally."]
     ];
 
     function roundRect(x, y, w, h, r) {
@@ -119,9 +133,13 @@ const html = String.raw`<!doctype html>
         out.textContent = "ERROR: MediaRecorder unavailable";
         return;
       }
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        out.textContent = "ERROR: Unsupported recorder type " + mimeType;
+        return;
+      }
       draw(0);
       const stream = canvas.captureStream(12);
-      const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });
+      const recorder = new MediaRecorder(stream, { mimeType });
       const chunks = [];
       recorder.ondataavailable = (event) => {
         if (event.data && event.data.size > 0) {
@@ -129,7 +147,7 @@ const html = String.raw`<!doctype html>
         }
       };
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "video/webm" });
+        const blob = new Blob(chunks, { type: mimeType });
         const reader = new FileReader();
         reader.onloadend = () => {
           out.textContent = reader.result;
@@ -153,34 +171,39 @@ const html = String.raw`<!doctype html>
   </script>
 </body>
 </html>`;
+}
+
+function recordDemo(spec) {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "repository-owner-demo-"));
+  const htmlPath = path.join(tempDir, "demo.html");
+  const profileDir = path.join(tempDir, "profile");
+  fs.writeFileSync(htmlPath, buildHtml(spec), "utf8");
+
+  const stdout = execFileSync(
+    findBrowser(),
+    [
+      "--headless=new",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--autoplay-policy=no-user-gesture-required",
+      "--run-all-compositor-stages-before-draw",
+      "--virtual-time-budget=7500",
+      `--user-data-dir=${profileDir}`,
+      "--dump-dom",
+      fileUrl(htmlPath)
+    ],
+    { encoding: "utf8", maxBuffer: 30 * 1024 * 1024 }
+  );
+
+  const match = stdout.match(/data:video\/(?:webm|mp4)(?:;[^,]+)?;base64,([A-Za-z0-9+/=]+)/);
+  if (!match) {
+    throw new Error(`Demo video generation failed for ${spec.artifactName}. Browser output ended with: ${stdout.slice(-600)}`);
+  }
+
+  fs.writeFileSync(spec.outputPath, Buffer.from(match[1], "base64"));
+  console.log(`Generated ${path.relative(process.cwd(), spec.outputPath)}`);
+}
 
 fs.mkdirSync(reportDir, { recursive: true });
 
-const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "repository-owner-demo-"));
-const htmlPath = path.join(tempDir, "demo.html");
-const profileDir = path.join(tempDir, "profile");
-fs.writeFileSync(htmlPath, html, "utf8");
-
-const stdout = execFileSync(
-  findBrowser(),
-  [
-    "--headless=new",
-    "--disable-gpu",
-    "--disable-dev-shm-usage",
-    "--autoplay-policy=no-user-gesture-required",
-    "--run-all-compositor-stages-before-draw",
-    "--virtual-time-budget=7500",
-    `--user-data-dir=${profileDir}`,
-    "--dump-dom",
-    fileUrl(htmlPath)
-  ],
-  { encoding: "utf8", maxBuffer: 30 * 1024 * 1024 }
-);
-
-const match = stdout.match(/data:video\/webm;base64,([A-Za-z0-9+/=]+)/);
-if (!match) {
-  throw new Error(`Demo video generation failed. Browser output ended with: ${stdout.slice(-600)}`);
-}
-
-fs.writeFileSync(outputPath, Buffer.from(match[1], "base64"));
-console.log(`Generated ${path.relative(process.cwd(), outputPath)}`);
+outputSpecs.forEach(recordDemo);

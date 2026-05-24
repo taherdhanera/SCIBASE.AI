@@ -30,5 +30,6 @@ npm run demo:video
 - `reports/reviewer-packet.md`
 - `reports/summary.svg`
 - `reports/demo.webm`
+- `reports/demo.mp4`
 
 All data is synthetic and local. The module does not call Git providers, repository hosting APIs, identity systems, storage systems, or external services.
