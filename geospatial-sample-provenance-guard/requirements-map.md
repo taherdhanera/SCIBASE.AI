@@ -8,7 +8,7 @@ Issue: `SCIBASE-AI/SCIBASE.AI#17`
 | Entity extraction | Validates field-sample entities, coordinates, vouchers, dataset DOI links, and graph edge endpoints. |
 | Knowledge navigation | Blocks unsafe or unresolved sample-location edges before they appear in graph navigation. |
 | AI research recommendations | Suppresses public recommendations when geospatial provenance, sensitive-site redaction, or DOI evidence is incomplete. |
-| Linked data and metadata | Checks CRS normalization, country/coordinate consistency, coordinate precision, collection dates, and sample-to-dataset DOI alignment. |
+| Linked data and metadata | Checks unique graph identities and DOI provenance, CRS normalization, country/coordinate consistency, coordinate precision, collection dates, and sample-to-dataset DOI alignment. |
 | Safe local validation | Includes dependency-free tests and demo generation from synthetic sample and graph metadata only. |
 
 ## Non-goals

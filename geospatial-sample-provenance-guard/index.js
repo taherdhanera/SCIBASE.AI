@@ -15,6 +15,23 @@ function daysBetween(a, b) {
   return Math.floor((right - left) / (24 * 60 * 60 * 1000));
 }
 
+function isValidDate(value) {
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(new Date(value).getTime());
+}
+
+function duplicateValues(items, valueForItem) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const item of items) {
+    const value = valueForItem(item);
+    if (seen.has(value)) {
+      duplicates.add(value);
+    }
+    seen.add(value);
+  }
+  return [...duplicates];
+}
+
 function datasetByDoi(project) {
   return new Map(project.datasets.map((dataset) => [dataset.doi, dataset]));
 }
@@ -25,6 +42,85 @@ function datasetById(project) {
 
 function sampleById(project) {
   return new Map(project.samples.map((sample) => [sample.id, sample]));
+}
+
+function validateGraphEvidenceIntegrity(project, findings) {
+  if (!isValidDate(project.asOfDate)) {
+    addFinding(
+      findings,
+      "critical",
+      "graph-packet-date-invalid",
+      "The graph packet has no valid as-of date.",
+      "Repair the packet timestamp before publishing graph nodes or recommendations.",
+      [String(project.asOfDate)]
+    );
+  }
+
+  const identityCollections = [
+    ["dataset", project.datasets],
+    ["sample", project.samples],
+    ["edge", project.edges]
+  ];
+  for (const [kind, items] of identityCollections) {
+    for (const duplicateId of duplicateValues(items, (item) => item.id)) {
+      addFinding(
+        findings,
+        "critical",
+        `${kind}-id-duplicate`,
+        `${kind} identifier ${duplicateId} appears more than once.`,
+        "Resolve graph identity ambiguity before building nodes or edges.",
+        [String(duplicateId)]
+      );
+    }
+  }
+
+  for (const duplicateDoi of duplicateValues(project.datasets, (dataset) => dataset.doi)) {
+    addFinding(
+      findings,
+      "critical",
+      "dataset-doi-duplicate",
+      `Dataset DOI ${duplicateDoi} resolves to more than one dataset node.`,
+      "Deduplicate DOI provenance before resolving sample-to-dataset edges.",
+      [String(duplicateDoi)]
+    );
+  }
+
+  for (const duplicateEdge of duplicateValues(
+    project.edges,
+    (edge) => `${edge.from}|${edge.predicate}|${edge.to}`
+  )) {
+    addFinding(
+      findings,
+      "high",
+      "graph-edge-duplicate",
+      `Graph relation ${duplicateEdge} appears more than once.`,
+      "Deduplicate graph relations before entity-page or recommendation publication.",
+      [duplicateEdge]
+    );
+  }
+
+  for (const sample of project.samples) {
+    if (!isValidDate(sample.collectionDate)) {
+      addFinding(
+        findings,
+        "critical",
+        "collection-date-invalid",
+        `${sample.id} has no valid collection date.`,
+        "Repair or quarantine the sample before emitting temporal graph edges.",
+        [sample.id, String(sample.collectionDate)]
+      );
+    }
+    if (!project.policy.acceptedCountryBounds[sample.country]) {
+      addFinding(
+        findings,
+        sample.publicRecommendation ? "critical" : "high",
+        "country-bounds-unavailable",
+        `${sample.id} uses country ${sample.country}, which has no accepted validation bounds.`,
+        "Hold location-derived publication until authoritative country bounds are configured.",
+        [sample.id, String(sample.country)]
+      );
+    }
+  }
 }
 
 function coordinatesInRange(sample) {
@@ -119,7 +215,11 @@ function evaluateSample(sample, project, datasetIndex, findings) {
     );
   }
 
-  if (daysBetween(project.asOfDate, sample.collectionDate) > project.policy.maxCollectionFutureDays) {
+  if (
+    isValidDate(project.asOfDate) &&
+    isValidDate(sample.collectionDate) &&
+    daysBetween(project.asOfDate, sample.collectionDate) > project.policy.maxCollectionFutureDays
+  ) {
     addFinding(
       findings,
       "medium",
@@ -179,6 +279,8 @@ function evaluateEdges(project, findings) {
 function evaluateGeospatialProvenance(project) {
   const findings = [];
   const datasets = datasetByDoi(project);
+
+  validateGraphEvidenceIntegrity(project, findings);
 
   for (const sample of project.samples) {
     evaluateSample(sample, project, datasets, findings);

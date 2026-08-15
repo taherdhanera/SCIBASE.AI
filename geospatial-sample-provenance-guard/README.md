@@ -7,7 +7,10 @@ The guard evaluates field-sample and specimen location graph edges before they
 appear on entity pages or public discovery recommendations. It checks coordinate
 ranges, CRS normalization, country/coordinate consistency, coordinate precision,
 sensitive-site redaction, voucher identifiers, dataset DOI resolution,
-collection-date plausibility, and sample-to-dataset edge alignment.
+collection-date plausibility, and sample-to-dataset edge alignment. It also
+fails closed on duplicate graph identities or DOI provenance, malformed
+collection dates, duplicate relations, and public recommendations whose country
+bounds cannot be validated.
 
 This is intentionally separate from broad graph extraction/navigation, link
 audit, ontology drift/alias/synonym controls, relationship conflict arbitration,

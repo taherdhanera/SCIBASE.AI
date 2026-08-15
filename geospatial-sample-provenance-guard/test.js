@@ -79,6 +79,47 @@ const cleanPacket = buildReviewPacket(cleanProject);
 assert.strictEqual(cleanPacket.decision, "geospatial-provenance-ready");
 assert.strictEqual(cleanPacket.findings.length, 0);
 
+const duplicateDoiProject = JSON.parse(JSON.stringify(cleanProject));
+duplicateDoiProject.datasets.push({
+  id: "dataset-duplicate-doi",
+  doi: duplicateDoiProject.datasets[0].doi,
+  title: "Ambiguous duplicate DOI dataset",
+  license: "CC-BY-4.0"
+});
+const duplicateDoiPacket = buildReviewPacket(duplicateDoiProject);
+assert.strictEqual(duplicateDoiPacket.decision, "block-geospatial-graph-publication");
+assert.ok(
+  duplicateDoiPacket.findings.some((finding) => finding.rule === "dataset-doi-duplicate"),
+  "expected duplicate DOI provenance to block publication"
+);
+
+const invalidCollectionProject = JSON.parse(JSON.stringify(cleanProject));
+invalidCollectionProject.samples[0].collectionDate = "not-a-date";
+const invalidCollectionPacket = buildReviewPacket(invalidCollectionProject);
+assert.strictEqual(invalidCollectionPacket.decision, "block-geospatial-graph-publication");
+assert.ok(
+  invalidCollectionPacket.findings.some((finding) => finding.rule === "collection-date-invalid"),
+  "expected invalid collection date to block publication"
+);
+
+const unknownCountryProject = JSON.parse(JSON.stringify(cleanProject));
+unknownCountryProject.samples[0].country = "Unconfigured-country";
+const unknownCountryPacket = buildReviewPacket(unknownCountryProject);
+assert.strictEqual(unknownCountryPacket.decision, "block-geospatial-graph-publication");
+assert.ok(
+  unknownCountryPacket.findings.some((finding) => finding.rule === "country-bounds-unavailable"),
+  "expected public recommendation without country bounds to block publication"
+);
+
+const duplicateEdgeProject = JSON.parse(JSON.stringify(cleanProject));
+duplicateEdgeProject.edges.push({ ...duplicateEdgeProject.edges[0], id: "edge-duplicate-relation" });
+const duplicateEdgePacket = buildReviewPacket(duplicateEdgeProject);
+assert.strictEqual(duplicateEdgePacket.decision, "hold-geospatial-edges-for-curator-review");
+assert.ok(
+  duplicateEdgePacket.findings.some((finding) => finding.rule === "graph-edge-duplicate"),
+  "expected duplicate relation to require curator review"
+);
+
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Findings"));
 assert.ok(markdown.includes("sensitive-site-overprecise-public-coordinate"));
