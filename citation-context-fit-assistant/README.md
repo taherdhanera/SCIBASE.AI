@@ -7,7 +7,10 @@ The assistant validates citation recommendations before one-click insertion. It
 checks whether each candidate supports, contradicts, only contextualizes, or is
 irrelevant to the highlighted manuscript claim. It also checks citation intent
 labels, evidence strength, field fit, stale evidence, and whether contradictory
-citations include an explicit contrast note.
+citations include an explicit contrast note. It also fails closed on duplicate
+claim or candidate identities, malformed normalized scores, future or invalid
+publication years, and unsupported relation or intent labels so malformed
+assistant output cannot silently become insertion-ready.
 
 This is intentionally separate from broad AI tool suites, evidence-grounded
 summarizers, citation provenance, citation metadata integrity, citation style

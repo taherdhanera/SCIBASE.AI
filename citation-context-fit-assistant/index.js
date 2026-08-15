@@ -13,8 +13,111 @@ function yearsOld(asOfDate, year) {
   return new Date(asOfDate).getUTCFullYear() - year;
 }
 
+function isValidDate(value) {
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(new Date(value).getTime());
+}
+
+function duplicateIds(items) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      duplicates.add(item.id);
+    }
+    seen.add(item.id);
+  }
+  return [...duplicates];
+}
+
 function claimById(project) {
   return new Map(project.manuscript.highlightedClaims.map((claim) => [claim.id, claim]));
+}
+
+function validateCitationEvidenceIntegrity(project, findings) {
+  if (!isValidDate(project.asOfDate)) {
+    addFinding(
+      findings,
+      "critical",
+      "citation-packet-date-invalid",
+      "The citation packet has no valid as-of date.",
+      "Repair the packet timestamp before evaluating citation recency.",
+      [String(project.asOfDate)]
+    );
+  }
+
+  for (const duplicateId of duplicateIds(project.manuscript.highlightedClaims)) {
+    addFinding(
+      findings,
+      "critical",
+      "claim-id-duplicate",
+      `Highlighted claim identifier ${duplicateId} appears more than once.`,
+      "Resolve claim-anchor ambiguity before evaluating or inserting citations.",
+      [String(duplicateId)]
+    );
+  }
+
+  for (const duplicateId of duplicateIds(project.candidates)) {
+    addFinding(
+      findings,
+      "critical",
+      "citation-candidate-id-duplicate",
+      `Citation candidate identifier ${duplicateId} appears more than once.`,
+      "Resolve candidate identity ambiguity before one-click insertion.",
+      [String(duplicateId)]
+    );
+  }
+
+  const allowedRelations = new Set(["supports", "contradicts", "contextualizes", "irrelevant"]);
+  const allowedIntents = new Set(["direct-support", "background", "method", "contrast"]);
+  const asOfYear = isValidDate(project.asOfDate) ? new Date(project.asOfDate).getUTCFullYear() : null;
+
+  for (const candidate of project.candidates) {
+    for (const field of ["evidenceStrength", "fieldOverlap"]) {
+      if (!Number.isFinite(candidate[field]) || candidate[field] < 0 || candidate[field] > 1) {
+        addFinding(
+          findings,
+          "critical",
+          "citation-score-invalid",
+          `${candidate.id} has invalid ${field} value ${candidate[field]}.`,
+          "Repair normalized citation evidence scores before evaluating insertion safety.",
+          [candidate.id, field, String(candidate[field])]
+        );
+      }
+    }
+
+    if (!Number.isInteger(candidate.year) || candidate.year < 1000 || (asOfYear !== null && candidate.year > asOfYear)) {
+      addFinding(
+        findings,
+        "critical",
+        "citation-year-invalid",
+        `${candidate.id} has invalid or future publication year ${candidate.year}.`,
+        "Verify publication chronology before evaluating citation recency.",
+        [candidate.id, String(candidate.year)]
+      );
+    }
+
+    if (!allowedRelations.has(candidate.relation)) {
+      addFinding(
+        findings,
+        "critical",
+        "citation-relation-invalid",
+        `${candidate.id} has unsupported relation ${candidate.relation}.`,
+        "Classify the candidate as support, contradiction, context, or irrelevant before insertion.",
+        [candidate.id, String(candidate.relation)]
+      );
+    }
+
+    if (candidate.citationIntent && !allowedIntents.has(candidate.citationIntent)) {
+      addFinding(
+        findings,
+        "critical",
+        "citation-intent-invalid",
+        `${candidate.id} has unsupported citation intent ${candidate.citationIntent}.`,
+        "Use an approved citation-intent label before insertion.",
+        [candidate.id, String(candidate.citationIntent)]
+      );
+    }
+  }
 }
 
 function evaluateCandidate(project, claim, candidate, findings) {
@@ -107,7 +210,12 @@ function evaluateCandidate(project, claim, candidate, findings) {
     );
   }
 
-  if (yearsOld(project.asOfDate, candidate.year) > project.policy.staleEvidenceYears && candidate.citationIntent !== "background") {
+  if (
+    isValidDate(project.asOfDate) &&
+    Number.isInteger(candidate.year) &&
+    yearsOld(project.asOfDate, candidate.year) > project.policy.staleEvidenceYears &&
+    candidate.citationIntent !== "background"
+  ) {
     addFinding(
       findings,
       "medium",
@@ -133,6 +241,8 @@ function evaluateCandidate(project, claim, candidate, findings) {
 function evaluateCitationFit(project) {
   const findings = [];
   const claims = claimById(project);
+
+  validateCitationEvidenceIntegrity(project, findings);
 
   for (const candidate of project.candidates) {
     evaluateCandidate(project, claims.get(candidate.claimId), candidate, findings);

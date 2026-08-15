@@ -66,6 +66,48 @@ const cleanPacket = buildReviewPacket(cleanProject);
 assert.strictEqual(cleanPacket.decision, "citation-context-fit-ready");
 assert.strictEqual(cleanPacket.findings.length, 0);
 
+const duplicateCandidateProject = JSON.parse(JSON.stringify(cleanProject));
+duplicateCandidateProject.candidates.push({ ...duplicateCandidateProject.candidates[0] });
+const duplicateCandidatePacket = buildReviewPacket(duplicateCandidateProject);
+assert.strictEqual(duplicateCandidatePacket.decision, "block-unsafe-citation-insertions");
+assert.ok(
+  duplicateCandidatePacket.findings.some((finding) => finding.rule === "citation-candidate-id-duplicate"),
+  "expected duplicate candidate identity to block insertion"
+);
+
+const invalidScoreProject = JSON.parse(JSON.stringify(cleanProject));
+invalidScoreProject.candidates[0].evidenceStrength = "high";
+invalidScoreProject.candidates[0].fieldOverlap = 1.4;
+const invalidScorePacket = buildReviewPacket(invalidScoreProject);
+assert.strictEqual(invalidScorePacket.decision, "block-unsafe-citation-insertions");
+assert.ok(
+  invalidScorePacket.findings.filter((finding) => finding.rule === "citation-score-invalid").length >= 2,
+  "expected malformed normalized scores to block insertion"
+);
+
+const invalidRelationProject = JSON.parse(JSON.stringify(cleanProject));
+invalidRelationProject.candidates[0].relation = "probably-supports";
+invalidRelationProject.candidates[0].citationIntent = "auto-insert";
+const invalidRelationPacket = buildReviewPacket(invalidRelationProject);
+assert.strictEqual(invalidRelationPacket.decision, "block-unsafe-citation-insertions");
+assert.ok(
+  invalidRelationPacket.findings.some((finding) => finding.rule === "citation-relation-invalid"),
+  "expected unsupported citation relation to block insertion"
+);
+assert.ok(
+  invalidRelationPacket.findings.some((finding) => finding.rule === "citation-intent-invalid"),
+  "expected unsupported citation intent to block insertion"
+);
+
+const futureYearProject = JSON.parse(JSON.stringify(cleanProject));
+futureYearProject.candidates[0].year = 2035;
+const futureYearPacket = buildReviewPacket(futureYearProject);
+assert.strictEqual(futureYearPacket.decision, "block-unsafe-citation-insertions");
+assert.ok(
+  futureYearPacket.findings.some((finding) => finding.rule === "citation-year-invalid"),
+  "expected future citation year to block insertion"
+);
+
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Insertion Decisions"));
 assert.ok(markdown.includes("contradictory-citation-for-supporting-claim"));
