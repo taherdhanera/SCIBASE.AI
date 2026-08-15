@@ -19,6 +19,8 @@ const EXTENSION_TYPES = {
   md: "document",
 };
 
+const ALLOWED_ACCESS = new Set(["public", "private", "restricted", "embargoed"]);
+
 function stableStringify(value) {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(",")}]`;
@@ -42,6 +44,68 @@ function assertArray(name, value) {
   if (!Array.isArray(value)) {
     throw new TypeError(`${name} must be an array`);
   }
+}
+
+function duplicateValues(values) {
+  const seen = new Set();
+  const duplicates = new Set();
+
+  for (const value of values) {
+    if (!value) {
+      continue;
+    }
+    if (seen.has(value)) {
+      duplicates.add(value);
+    }
+    seen.add(value);
+  }
+
+  return [...duplicates].sort();
+}
+
+function validateHostingIntegrity(project) {
+  const blockers = [];
+  const previousArtifacts = project.previousArtifacts || [];
+
+  assertArray("project.previousArtifacts", previousArtifacts);
+
+  for (const [index, artifact] of project.artifacts.entries()) {
+    if (!artifact.id || !String(artifact.id).trim()) {
+      blockers.push(`artifact_id_missing:${index}`);
+    }
+    if (!artifact.name || !String(artifact.name).trim()) {
+      blockers.push(`artifact_name_missing:${artifact.id || index}`);
+    }
+    if (artifact.access && !ALLOWED_ACCESS.has(artifact.access)) {
+      blockers.push(`artifact_access_invalid:${artifact.id || index}`);
+    }
+  }
+
+  for (const id of duplicateValues(project.artifacts.map((artifact) => artifact.id))) {
+    blockers.push(`artifact_id_duplicate:${id}`);
+  }
+  for (const id of duplicateValues(previousArtifacts.map((artifact) => artifact.id))) {
+    blockers.push(`previous_artifact_id_duplicate:${id}`);
+  }
+
+  const persistentIds = project.artifacts.map((artifact) => artifact.persistentId);
+  for (const id of duplicateValues(persistentIds)) {
+    blockers.push(`artifact_persistent_id_duplicate:${id}`);
+  }
+  if (project.persistentId && persistentIds.includes(project.persistentId)) {
+    blockers.push(`project_artifact_persistent_id_collision:${project.persistentId}`);
+  }
+
+  const currentYear = new Date().getUTCFullYear();
+  if (
+    !Number.isInteger(project.publicationYear) ||
+    project.publicationYear < 1000 ||
+    project.publicationYear > currentYear
+  ) {
+    blockers.push("project_publication_year_invalid");
+  }
+
+  return blockers;
 }
 
 function getExtension(name) {
@@ -284,10 +348,11 @@ function evaluateArtifactHosting(project) {
   assertArray("project.creators", project.creators);
   assertArray("project.artifacts", project.artifacts);
 
+  const integrityBlockers = validateHostingIntegrity(project);
   const manifest = buildArtifactManifest(project);
   const runtime = validateRuntimeEnvironment(project.executionEnvironment);
   const versionDiffs = buildVersionDiffs(project);
-  const blockers = [];
+  const blockers = [...integrityBlockers];
 
   for (const artifact of manifest) {
     if (!artifact.metadataCheck.ok) {
@@ -336,5 +401,6 @@ module.exports = {
   metadataIdentifierType,
   sha256,
   stableStringify,
+  validateHostingIntegrity,
   validateRuntimeEnvironment,
 };

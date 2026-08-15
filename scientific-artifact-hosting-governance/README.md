@@ -12,6 +12,7 @@ This module adds a dependency-free governance layer for the Scientific Data & Co
 - JSON-LD and DataCite export payloads for FAIR discovery and DOI workflows.
 - Execution environment readiness checks for reproducible analysis commands.
 - Audit hash for review and long-term traceability.
+- Fail-closed integrity checks for duplicate artifact identities, ambiguous version history, malformed access states, and invalid publication years.
 
 ## Run The Demo
 
@@ -33,7 +34,7 @@ For bounty review, the same walkthrough is also available as a short WebM demo v
 node scientific-artifact-hosting-governance/test.js
 ```
 
-The tests cover type detection, manifest previews and hashes, metadata blockers, version diffs, runtime readiness, JSON-LD/DataCite exports, and audit hashing.
+The tests cover type detection, manifest previews and hashes, metadata blockers, identity collisions, malformed release metadata, ambiguous version history, runtime readiness, JSON-LD/DataCite exports, and audit hashing.
 
 ## Requirement Mapping
 
@@ -45,6 +46,7 @@ The tests cover type detection, manifest previews and hashes, metadata blockers,
 | JSON-LD/schema.org metadata | `buildJsonLd()` emits schema.org-compatible dataset distribution metadata. |
 | DataCite metadata | `buildDataCite()` emits DOI-oriented identifier, creator, title, publisher, and related artifact records. |
 | FAIR compliance | `scoreFairReadiness()` checks metadata completeness, public access, and runtime readiness. |
+| Release integrity | `validateHostingIntegrity()` blocks ambiguous identifiers, malformed access states, invalid publication years, and duplicate version-history identities. |
 | Executable environments | `validateRuntimeEnvironment()` verifies Docker/environment definition and reproducibility commands. |
 
 ## Design Notes

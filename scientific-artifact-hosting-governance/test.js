@@ -5,6 +5,7 @@ const {
   diffArtifactVersions,
   evaluateArtifactHosting,
   metadataIdentifierType,
+  validateHostingIntegrity,
   validateRuntimeEnvironment,
 } = require("./index");
 const {previousDataset, project} = require("./sample-data");
@@ -80,6 +81,64 @@ function testMetadataIdentifierTypes() {
   assert.strictEqual(metadataIdentifierType("analysis.py"), "LocalId");
 }
 
+function testDuplicateArtifactIdentityBlocksReadiness() {
+  const duplicateIdentity = {
+    ...project,
+    artifacts: [
+      project.artifacts[0],
+      {
+        ...project.artifacts[1],
+        id: project.artifacts[0].id,
+        persistentId: project.artifacts[0].persistentId,
+      },
+    ],
+  };
+  const result = evaluateArtifactHosting(duplicateIdentity);
+
+  assert.strictEqual(result.hostingReadiness, "blocked");
+  assert(result.blockers.includes("artifact_id_duplicate:artifact-cell-counts"));
+  assert(result.blockers.includes("artifact_persistent_id_duplicate:10.5555/scibase.cell-counts.v1"));
+}
+
+function testMalformedReleaseMetadataBlocksReadiness() {
+  const malformed = {
+    ...project,
+    publicationYear: new Date().getUTCFullYear() + 1,
+    artifacts: [
+      {
+        ...project.artifacts[0],
+        access: "publci",
+      },
+      {
+        ...project.artifacts[1],
+        id: "",
+        name: "",
+      },
+    ],
+  };
+  const result = evaluateArtifactHosting(malformed);
+
+  assert.strictEqual(result.hostingReadiness, "blocked");
+  assert(result.blockers.includes("artifact_access_invalid:artifact-cell-counts"));
+  assert(result.blockers.includes("artifact_id_missing:1"));
+  assert(result.blockers.includes("artifact_name_missing:1"));
+  assert(result.blockers.includes("project_publication_year_invalid"));
+}
+
+function testAmbiguousVersionHistoryBlocksReadiness() {
+  const ambiguousHistory = {
+    ...project,
+    previousArtifacts: [previousDataset, {...previousDataset}],
+  };
+
+  assert(
+    validateHostingIntegrity(ambiguousHistory).includes(
+      "previous_artifact_id_duplicate:artifact-cell-counts",
+    ),
+  );
+  assert.strictEqual(evaluateArtifactHosting(ambiguousHistory).hostingReadiness, "blocked");
+}
+
 testTypeDetection();
 testManifestBuildsPreviewAndHashes();
 testMissingMetadataBlocksReadiness();
@@ -87,5 +146,8 @@ testVersionDiffs();
 testRuntimeReadiness();
 testFullEvaluationExportsMetadata();
 testMetadataIdentifierTypes();
+testDuplicateArtifactIdentityBlocksReadiness();
+testMalformedReleaseMetadataBlocksReadiness();
+testAmbiguousVersionHistoryBlocksReadiness();
 
 console.log("scientific-artifact-hosting-governance tests passed");
