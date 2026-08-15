@@ -9,6 +9,18 @@ function unique(values) {
   return [...new Set((values || []).filter(Boolean))];
 }
 
+function duplicates(values) {
+  const seen = new Set();
+  const repeated = new Set();
+  for (const value of (values || []).filter(Boolean)) {
+    if (seen.has(value)) {
+      repeated.add(value);
+    }
+    seen.add(value);
+  }
+  return [...repeated];
+}
+
 function toScopeSet(records, key) {
   return new Set(records.map((record) => record[key]).filter(Boolean));
 }
@@ -49,6 +61,7 @@ function evaluateClaim(claim, evidence, manuscript) {
   const linkedEvidence = evidenceRecords.filter((record) => evidenceIds.includes(record.id));
   const linkedEvidenceIds = new Set(linkedEvidence.map((record) => record.id));
   const unresolvedEvidenceIds = evidenceIds.filter((id) => !linkedEvidenceIds.has(id));
+  const duplicateLinkedEvidenceIds = duplicates(linkedEvidence.map((record) => record.id));
   const findings = [];
   const scope = claim.assertedScope || {};
 
@@ -69,6 +82,16 @@ function evaluateClaim(claim, evidence, manuscript) {
       "unresolved-evidence-links",
       `Claim ${claim.id} references evidence artifacts that are not present: ${unresolvedEvidenceIds.join(", ")}.`,
       "Repair or remove every unresolved evidence reference before the review packet is released."
+    );
+  }
+
+  if (duplicateLinkedEvidenceIds.length > 0) {
+    addFinding(
+      findings,
+      "critical",
+      "ambiguous-evidence-identifiers",
+      `Claim ${claim.id} resolves to duplicate evidence identifiers: ${duplicateLinkedEvidenceIds.join(", ")}.`,
+      "Assign globally unique evidence identifiers and re-link the claim before review."
     );
   }
 
@@ -160,12 +183,15 @@ function evaluateClaim(claim, evidence, manuscript) {
     0,
     100 - findings.reduce((total, finding) => total + DEFAULT_WEIGHTS[finding.severity], 0)
   );
+  const hasCriticalFinding = findings.some((finding) => finding.severity === "critical");
 
   return {
     id: claim.id,
     text: claim.text,
     score,
-    decision: linkedEvidence.length === 0 ? "quarantine-from-review-packet" : decisionFromScore(score),
+    decision: linkedEvidence.length === 0 || hasCriticalFinding
+      ? "quarantine-from-review-packet"
+      : decisionFromScore(score),
     evidenceCount: linkedEvidence.length,
     observedScope: {
       populations: [...observedPopulations],
@@ -260,6 +286,9 @@ function buildReviewPacket(project) {
   const averageScore = claimReviews.length === 0
     ? 0
     : Math.round(claimReviews.reduce((total, review) => total + review.score, 0) / claimReviews.length);
+  const packetDecision = claimReviews.length === 0 || severitySummary.critical > 0
+    ? "quarantine-from-review-packet"
+    : decisionFromScore(averageScore);
 
   return {
     projectId: safeProject.id || "unidentified-project",
@@ -267,7 +296,7 @@ function buildReviewPacket(project) {
     assistant: "external-validity-transfer-assistant",
     issue: "SCIBASE-AI/SCIBASE.AI#16",
     averageScore,
-    decision: decisionFromScore(averageScore),
+    decision: packetDecision,
     severitySummary,
     claimReviews,
     peerReviewSuggestions: claimReviews.flatMap((review) =>

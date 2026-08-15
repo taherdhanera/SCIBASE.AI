@@ -70,10 +70,63 @@ const malformedReview = evaluateClaim(
 assert.strictEqual(malformedReview.decision, "quarantine-from-review-packet");
 assert.ok(malformedReview.findings.some((finding) => finding.rule === "missing-evidence"));
 
+const duplicateEvidenceReview = evaluateClaim(
+  {
+    id: "claim-ambiguous-evidence",
+    text: "The result transfers to adult patients.",
+    assertedScope: { populations: ["adult"] },
+    evidenceIds: ["duplicate-evidence"],
+    confidence: "moderate"
+  },
+  [
+    { id: "duplicate-evidence", population: "adult", environment: "node", reproducible: true },
+    { id: "duplicate-evidence", population: "adult", environment: "node", reproducible: true }
+  ],
+  { requiredSubgroups: [] }
+);
+assert.strictEqual(duplicateEvidenceReview.decision, "quarantine-from-review-packet");
+assert.ok(
+  duplicateEvidenceReview.findings.some((finding) => finding.rule === "ambiguous-evidence-identifiers"),
+  "duplicate evidence identifiers should be treated as a critical ambiguity"
+);
+
 const emptyPacket = buildReviewPacket({ id: "empty-project", manuscript: {} });
 assert.strictEqual(emptyPacket.averageScore, 0);
 assert.strictEqual(emptyPacket.decision, "quarantine-from-review-packet");
 assert.deepStrictEqual(emptyPacket.claimReviews, []);
+
+const maskingProject = {
+  id: "masking-project",
+  title: "Critical claim masking regression",
+  manuscript: {
+    requiredSubgroups: [],
+    claims: [
+      { id: "unsupported", text: "Unsupported claim", assertedScope: {}, evidenceIds: [] },
+      ...[1, 2, 3, 4].map((index) => ({
+        id: `supported-${index}`,
+        text: `Supported claim ${index}`,
+        assertedScope: { populations: ["adult"] },
+        evidenceIds: ["valid-evidence"]
+      }))
+    ]
+  },
+  evidence: [
+    {
+      id: "valid-evidence",
+      population: "adult",
+      environment: "node",
+      reproducible: true,
+      externalValidation: true
+    }
+  ]
+};
+const maskingPacket = buildReviewPacket(maskingProject);
+assert.ok(maskingPacket.averageScore >= 82, "fixture should prove the average alone appears review-ready");
+assert.strictEqual(
+  maskingPacket.decision,
+  "quarantine-from-review-packet",
+  "one critical claim must not be hidden by a high packet average"
+);
 
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Claim Reviews"));

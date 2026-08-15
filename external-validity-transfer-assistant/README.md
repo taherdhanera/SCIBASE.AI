@@ -13,7 +13,9 @@ It adds a deterministic research-assistant review gate for external validity and
 - Whether strong claims are missing required subgroup coverage.
 - Whether a broad transfer claim lacks external validation.
 - Whether claims contain unresolved or malformed evidence references.
+- Whether duplicate evidence identifiers make claim provenance ambiguous.
 - Whether empty or malformed review packets fail closed instead of crashing.
+- Whether a critical claim is being hidden by a high aggregate average.
 
 ## Outputs
 
