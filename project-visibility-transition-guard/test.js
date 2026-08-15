@@ -83,6 +83,47 @@ const cleanPacket = buildReviewPacket(cleanProject);
 assert.strictEqual(cleanPacket.decision, "visibility-transition-ready");
 assert.strictEqual(cleanPacket.findings.length, 0);
 
+const duplicateAuditProject = JSON.parse(JSON.stringify(cleanProject));
+duplicateAuditProject.auditEvents = Array.from({ length: 4 }, () => ({
+  id: "audit-duplicate",
+  actorId: "user-owner",
+  action: "visibility-requested",
+  at: "2026-05-22T17:15:00Z"
+}));
+const duplicateAuditPacket = buildReviewPacket(duplicateAuditProject);
+assert.strictEqual(duplicateAuditPacket.decision, "block-public-visibility-transition");
+assert.ok(
+  duplicateAuditPacket.findings.some((finding) => finding.rule === "audit-event-id-duplicate"),
+  "expected duplicate audit identifiers to block visibility"
+);
+assert.ok(
+  duplicateAuditPacket.findings.some((finding) => finding.rule === "required-audit-action-missing"),
+  "event count alone must not satisfy required audit actions"
+);
+
+const unknownActorProject = JSON.parse(JSON.stringify(cleanProject));
+unknownActorProject.auditEvents[1].actorId = "unknown-approver";
+const unknownActorPacket = buildReviewPacket(unknownActorProject);
+assert.strictEqual(unknownActorPacket.decision, "block-public-visibility-transition");
+assert.ok(
+  unknownActorPacket.findings.some((finding) => finding.rule === "audit-actor-unknown"),
+  "expected an unknown audit actor to block visibility"
+);
+
+const predatedApprovalProject = JSON.parse(JSON.stringify(cleanProject));
+predatedApprovalProject.auditEvents[1].at = "2026-05-22T17:14:00Z";
+const predatedApprovalPacket = buildReviewPacket(predatedApprovalProject);
+assert.strictEqual(predatedApprovalPacket.decision, "block-public-visibility-transition");
+assert.ok(
+  predatedApprovalPacket.findings.some((finding) => finding.rule === "audit-event-precedes-request"),
+  "expected a pre-request approval event to block visibility"
+);
+
+const noopProject = JSON.parse(JSON.stringify(cleanProject));
+noopProject.workspace.requestedVisibility = noopProject.workspace.currentVisibility;
+const noopPacket = buildReviewPacket(noopProject);
+assert.strictEqual(noopPacket.decision, "skip-noop-visibility-transition");
+
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Findings"));
 assert.ok(markdown.includes("sensitive-object-in-public-transition"));

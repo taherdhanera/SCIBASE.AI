@@ -10,13 +10,19 @@ Score: 0
 
 | Severity | Count |
 | --- | ---: |
-| critical | 6 |
+| critical | 8 |
 | high | 8 |
 | medium | 2 |
 | low | 0 |
 
 ## Findings
 
+- **critical / required-audit-action-missing**: Required audit action object-reviewed is missing.
+  - Action: Record the complete request, review, approval, and release decision trail before applying visibility.
+  - Refs: proj-visible-221, object-reviewed
+- **critical / required-audit-action-missing**: Required audit action public-release-approved is missing.
+  - Action: Record the complete request, review, approval, and release decision trail before applying visibility.
+  - Refs: proj-visible-221, public-release-approved
 - **critical / required-visibility-approver-missing**: Required data-steward approval is not complete.
   - Action: Block public visibility until all required governance approvers consent.
   - Refs: data-steward

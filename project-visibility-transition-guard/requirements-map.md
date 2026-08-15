@@ -8,7 +8,7 @@ Issue: `SCIBASE-AI/SCIBASE.AI#11`
 | Visibility settings | Evaluates `institutional-only -> public` transitions before the workspace is exposed. |
 | Role-based governance | Requires owner, data-steward, and institution-admin approvals before public release. |
 | Fine-grained object-level control | Blocks unsafe public object permissions, restricted datasets, anonymous-review comments, and non-allowlisted object kinds. |
-| Audit log | Requires minimum transition audit evidence and emits deterministic review actions. |
+| Audit log | Requires unique, attributable, chronological request/review/approval/release evidence; event count alone cannot satisfy the guard. |
 | Safe local validation | Includes dependency-free tests and demo generation from synthetic project metadata only. |
 
 ## Non-goals

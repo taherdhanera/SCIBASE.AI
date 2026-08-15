@@ -9,12 +9,32 @@
   "decision": "block-public-visibility-transition",
   "score": 0,
   "severitySummary": {
-    "critical": 6,
+    "critical": 8,
     "high": 8,
     "medium": 2,
     "low": 0
   },
   "findings": [
+    {
+      "severity": "critical",
+      "rule": "required-audit-action-missing",
+      "message": "Required audit action object-reviewed is missing.",
+      "action": "Record the complete request, review, approval, and release decision trail before applying visibility.",
+      "refs": [
+        "proj-visible-221",
+        "object-reviewed"
+      ]
+    },
+    {
+      "severity": "critical",
+      "rule": "required-audit-action-missing",
+      "message": "Required audit action public-release-approved is missing.",
+      "action": "Record the complete request, review, approval, and release decision trail before applying visibility.",
+      "refs": [
+        "proj-visible-221",
+        "public-release-approved"
+      ]
+    },
     {
       "severity": "critical",
       "rule": "required-visibility-approver-missing",
@@ -175,6 +195,24 @@
     }
   ],
   "transitionActions": [
+    {
+      "priority": "blocking",
+      "rule": "required-audit-action-missing",
+      "action": "Record the complete request, review, approval, and release decision trail before applying visibility.",
+      "refs": [
+        "proj-visible-221",
+        "object-reviewed"
+      ]
+    },
+    {
+      "priority": "blocking",
+      "rule": "required-audit-action-missing",
+      "action": "Record the complete request, review, approval, and release decision trail before applying visibility.",
+      "refs": [
+        "proj-visible-221",
+        "public-release-approved"
+      ]
+    },
     {
       "priority": "blocking",
       "rule": "required-visibility-approver-missing",

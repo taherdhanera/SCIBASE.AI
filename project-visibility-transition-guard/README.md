@@ -7,7 +7,10 @@ The guard evaluates private, institutional-only, or invitation-only scientific
 workspaces before they are made public. It checks required approvals,
 collaborator profile consent, object-level document/code/data permissions,
 sensitive labels, public readiness, active IRB/funder holds, external partner
-access, and immutable audit evidence.
+access, and immutable audit evidence. Audit evidence now fails closed on
+duplicate identifiers, unknown actors, invalid or pre-request timestamps, and
+missing request/review/approval/release actions; event count alone cannot make
+an unsafe transition appear review-ready.
 
 This is intentionally separate from workspace/RBAC ledgers, privacy access
 reviews, identity recovery, member lifecycle/offboarding, institutional

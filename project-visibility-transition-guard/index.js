@@ -9,6 +9,22 @@ function addFinding(findings, severity, rule, message, action, refs = []) {
   findings.push({ severity, rule, message, action, refs });
 }
 
+function isValidDate(value) {
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(new Date(value).getTime());
+}
+
+function duplicateIds(items) {
+  const seen = new Set();
+  const duplicates = new Set();
+  for (const item of items) {
+    if (seen.has(item.id)) {
+      duplicates.add(item.id);
+    }
+    seen.add(item.id);
+  }
+  return [...duplicates];
+}
+
 function collaboratorById(project) {
   return new Map(project.collaborators.map((collaborator) => [collaborator.id, collaborator]));
 }
@@ -21,10 +37,115 @@ function activeHolds(project) {
   return project.holds.filter((hold) => hold.status === "active");
 }
 
+function validateEvidenceIntegrity(project, findings) {
+  const identityCollections = [
+    ["collaborator", project.collaborators],
+    ["object", project.objects],
+    ["hold", project.holds],
+    ["external-access", project.externalAccess],
+    ["audit-event", project.auditEvents]
+  ];
+
+  for (const [kind, items] of identityCollections) {
+    for (const duplicateId of duplicateIds(items)) {
+      addFinding(
+        findings,
+        "critical",
+        `${kind}-id-duplicate`,
+        `${kind} identifier ${duplicateId} appears more than once.`,
+        "Resolve identity ambiguity before evaluating or applying public visibility.",
+        [duplicateId]
+      );
+    }
+  }
+
+  const collaboratorIds = new Set(project.collaborators.map((collaborator) => collaborator.id));
+  if (!collaboratorIds.has(project.workspace.requestedBy)) {
+    addFinding(
+      findings,
+      "critical",
+      "visibility-requester-unknown",
+      `Visibility requester ${project.workspace.requestedBy} is not a workspace collaborator.`,
+      "Identify and authorize the requester before evaluating the transition.",
+      [project.workspace.id, project.workspace.requestedBy]
+    );
+  }
+
+  if (!isValidDate(project.workspace.requestedAt)) {
+    addFinding(
+      findings,
+      "critical",
+      "visibility-request-date-invalid",
+      "The visibility request has no valid timestamp.",
+      "Repair the request evidence before evaluating the transition.",
+      [project.workspace.id, String(project.workspace.requestedAt)]
+    );
+  }
+
+  const requiredAuditActions = project.policy.requiredAuditActions || [
+    "visibility-requested",
+    "object-reviewed",
+    "institution-approved",
+    "public-release-approved"
+  ];
+  const observedAuditActions = new Set();
+  for (const event of project.auditEvents) {
+    observedAuditActions.add(event.action);
+    if (!collaboratorIds.has(event.actorId)) {
+      addFinding(
+        findings,
+        "critical",
+        "audit-actor-unknown",
+        `Audit event ${event.id} references unknown actor ${event.actorId}.`,
+        "Resolve the event actor before accepting the transition audit trail.",
+        [event.id, event.actorId]
+      );
+    }
+    if (!isValidDate(event.at)) {
+      addFinding(
+        findings,
+        "critical",
+        "audit-event-date-invalid",
+        `Audit event ${event.id} has no valid timestamp.`,
+        "Repair or quarantine the event before accepting the transition audit trail.",
+        [event.id, String(event.at)]
+      );
+    } else if (
+      isValidDate(project.workspace.requestedAt) &&
+      event.action !== "visibility-requested" &&
+      new Date(event.at).getTime() < new Date(project.workspace.requestedAt).getTime()
+    ) {
+      addFinding(
+        findings,
+        "critical",
+        "audit-event-precedes-request",
+        `Audit event ${event.id} predates the visibility request.`,
+        "Rebuild the chronological audit trail before applying visibility.",
+        [event.id, event.at, project.workspace.requestedAt]
+      );
+    }
+  }
+
+  for (const action of requiredAuditActions) {
+    if (!observedAuditActions.has(action)) {
+      addFinding(
+        findings,
+        "critical",
+        "required-audit-action-missing",
+        `Required audit action ${action} is missing.`,
+        "Record the complete request, review, approval, and release decision trail before applying visibility.",
+        [project.workspace.id, action]
+      );
+    }
+  }
+}
+
 function evaluateVisibilityTransition(project) {
   const findings = [];
   const collaborators = collaboratorById(project);
   const objects = objectById(project);
+
+  validateEvidenceIntegrity(project, findings);
 
   if (project.workspace.currentVisibility === project.workspace.requestedVisibility) {
     addFinding(
@@ -191,6 +312,9 @@ function decisionFromEvaluation(evaluation) {
   }
   if (evaluation.score < 90) {
     return "manual-review-before-publication";
+  }
+  if (evaluation.findings.some((finding) => finding.rule === "visibility-transition-noop")) {
+    return "skip-noop-visibility-transition";
   }
   return "visibility-transition-ready";
 }

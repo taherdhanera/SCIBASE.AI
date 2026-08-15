@@ -13,7 +13,13 @@ const project = {
     requiredApproverRoles: ["owner", "data-steward", "institution-admin"],
     sensitiveLabels: ["restricted-data", "human-derived", "partner-confidential", "anonymous-review"],
     publicProfileRequiresConsent: true,
-    minimumAuditEvents: 4
+    minimumAuditEvents: 4,
+    requiredAuditActions: [
+      "visibility-requested",
+      "object-reviewed",
+      "institution-approved",
+      "public-release-approved"
+    ]
   },
   collaborators: [
     { id: "user-owner", role: "owner", consent: "approved", consentAt: "2026-05-21", profilePublic: true },
