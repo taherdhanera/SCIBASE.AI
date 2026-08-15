@@ -95,6 +95,45 @@ const cleanPacket = buildReviewPacket(cleanProject);
 assert.strictEqual(cleanPacket.decision, "workload-equity-ready");
 assert.strictEqual(cleanPacket.findings.length, 0);
 
+const futureHistoryProject = JSON.parse(JSON.stringify(cleanProject));
+futureHistoryProject.recentAssignmentHistory.push({
+  id: "hist-future",
+  reviewerId: "rev-001",
+  assignedAt: "2026-06-20",
+  pointsAwarded: 99
+});
+const futureHistoryPacket = buildReviewPacket(futureHistoryProject);
+assert.strictEqual(futureHistoryPacket.decision, "block-reputation-scoring-until-workload-is-fair");
+assert.ok(
+  futureHistoryPacket.findings.some((finding) => finding.rule === "history-date-in-future"),
+  "expected future-dated history to block scoring"
+);
+assert.strictEqual(
+  futureHistoryPacket.concentration.total,
+  cleanProject.recentAssignmentHistory.length,
+  "future-dated history must not distort concentration"
+);
+
+const invalidDeadlineProject = JSON.parse(JSON.stringify(cleanProject));
+invalidDeadlineProject.pendingAssignments[0].dueDate = "not-a-date";
+const invalidDeadlinePacket = buildReviewPacket(invalidDeadlineProject);
+assert.strictEqual(invalidDeadlinePacket.decision, "block-reputation-scoring-until-workload-is-fair");
+assert.ok(
+  invalidDeadlinePacket.findings.some((finding) => finding.rule === "assignment-due-date-invalid"),
+  "expected invalid assignment deadline to block scoring"
+);
+
+const reversedWindowProject = JSON.parse(JSON.stringify(cleanProject));
+reversedWindowProject.reviewers[0].unavailableWindows = [
+  { startsAt: "2026-05-30", endsAt: "2026-05-25", reason: "invalid fixture" }
+];
+const reversedWindowPacket = buildReviewPacket(reversedWindowProject);
+assert.strictEqual(reversedWindowPacket.decision, "block-reputation-scoring-until-workload-is-fair");
+assert.ok(
+  reversedWindowPacket.findings.some((finding) => finding.rule === "unavailable-window-reversed"),
+  "expected reversed unavailable window to block scoring"
+);
+
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Assignment Decisions"));
 assert.ok(markdown.includes("suppress-negative-reputation-delta"));

@@ -11,6 +11,10 @@ function daysBetween(a, b) {
   return Math.floor((right - left) / (24 * 60 * 60 * 1000));
 }
 
+function isValidDate(value) {
+  return typeof value === "string" && value.trim() !== "" && Number.isFinite(new Date(value).getTime());
+}
+
 function addFinding(findings, severity, rule, message, action, refs = []) {
   findings.push({ severity, rule, message, action, refs });
 }
@@ -22,6 +26,130 @@ function isDateWithinWindow(date, window) {
 
 function findReviewer(project, reviewerId) {
   return project.reviewers.find((reviewer) => reviewer.id === reviewerId);
+}
+
+function validateEvidenceIntegrity(project, findings) {
+  if (!isValidDate(project.asOfDate)) {
+    addFinding(
+      findings,
+      "critical",
+      "as-of-date-invalid",
+      "The workload packet has no valid as-of date.",
+      "Block scoring until the packet has a valid review timestamp.",
+      [String(project.asOfDate)]
+    );
+    return;
+  }
+
+  const asOfTime = new Date(project.asOfDate).getTime();
+  const seenReviewerIds = new Set();
+  for (const reviewer of project.reviewers) {
+    if (seenReviewerIds.has(reviewer.id)) {
+      addFinding(
+        findings,
+        "critical",
+        "reviewer-id-duplicate",
+        `Reviewer identifier ${reviewer.id} appears more than once.`,
+        "Resolve reviewer identity ambiguity before assigning or scoring reviews.",
+        [reviewer.id]
+      );
+    }
+    seenReviewerIds.add(reviewer.id);
+
+    for (const field of ["lastCompletedReviewAt", "optOutUntil"]) {
+      if (reviewer[field] && !isValidDate(reviewer[field])) {
+        addFinding(
+          findings,
+          "critical",
+          "reviewer-date-invalid",
+          `${reviewer.id} has an invalid ${field} value.`,
+          "Repair the reviewer availability evidence before reputation scoring.",
+          [reviewer.id, field, String(reviewer[field])]
+        );
+      }
+    }
+
+    for (const window of reviewer.unavailableWindows) {
+      if (!isValidDate(window.startsAt) || !isValidDate(window.endsAt)) {
+        addFinding(
+          findings,
+          "critical",
+          "unavailable-window-invalid",
+          `${reviewer.id} has an unavailable window with an invalid boundary.`,
+          "Repair the availability window before assigning or scoring reviews.",
+          [reviewer.id, String(window.startsAt), String(window.endsAt)]
+        );
+      } else if (new Date(window.startsAt).getTime() > new Date(window.endsAt).getTime()) {
+        addFinding(
+          findings,
+          "critical",
+          "unavailable-window-reversed",
+          `${reviewer.id} has an unavailable window whose start follows its end.`,
+          "Correct the window chronology before assigning or scoring reviews.",
+          [reviewer.id, window.startsAt, window.endsAt]
+        );
+      }
+    }
+  }
+
+  const seenAssignmentIds = new Set();
+  for (const assignment of project.pendingAssignments) {
+    if (seenAssignmentIds.has(assignment.id)) {
+      addFinding(
+        findings,
+        "critical",
+        "assignment-id-duplicate",
+        `Pending assignment identifier ${assignment.id} appears more than once.`,
+        "Resolve assignment identity ambiguity before reputation scoring.",
+        [assignment.id]
+      );
+    }
+    seenAssignmentIds.add(assignment.id);
+    if (!isValidDate(assignment.dueDate)) {
+      addFinding(
+        findings,
+        "critical",
+        "assignment-due-date-invalid",
+        `${assignment.id} has no valid due date.`,
+        "Repair the assignment deadline before workload or late-penalty scoring.",
+        [assignment.id, String(assignment.dueDate)]
+      );
+    }
+  }
+
+  const seenHistoryIds = new Set();
+  for (const item of project.recentAssignmentHistory) {
+    if (seenHistoryIds.has(item.id)) {
+      addFinding(
+        findings,
+        "critical",
+        "history-id-duplicate",
+        `Assignment-history identifier ${item.id} appears more than once.`,
+        "Deduplicate assignment history before calculating workload concentration.",
+        [item.id]
+      );
+    }
+    seenHistoryIds.add(item.id);
+    if (!isValidDate(item.assignedAt)) {
+      addFinding(
+        findings,
+        "critical",
+        "history-date-invalid",
+        `${item.id} has no valid assignment timestamp.`,
+        "Repair or quarantine the history item before calculating workload concentration.",
+        [item.id, String(item.assignedAt)]
+      );
+    } else if (new Date(item.assignedAt).getTime() > asOfTime) {
+      addFinding(
+        findings,
+        "critical",
+        "history-date-in-future",
+        `${item.id} is dated after the packet as-of date.`,
+        "Quarantine future-dated history before calculating workload concentration.",
+        [item.id, item.assignedAt, project.asOfDate]
+      );
+    }
+  }
 }
 
 function workloadAfterAssignment(reviewer, assignment) {
@@ -111,7 +239,10 @@ function buildAssignmentDecision(project, reviewer, assignment, reasons) {
 
 function concentrationSummary(project) {
   const recent = project.recentAssignmentHistory.filter(
-    (item) => daysBetween(item.assignedAt, project.asOfDate) <= project.policy.concentrationWindowDays
+    (item) => {
+      const ageDays = daysBetween(item.assignedAt, project.asOfDate);
+      return Number.isFinite(ageDays) && ageDays >= 0 && ageDays <= project.policy.concentrationWindowDays;
+    }
   );
   const byReviewer = recent.reduce((summary, item) => {
     summary[item.reviewerId] = (summary[item.reviewerId] || 0) + 1;
@@ -130,6 +261,8 @@ function concentrationSummary(project) {
 function evaluateWorkloadEquity(project) {
   const findings = [];
   const decisions = [];
+
+  validateEvidenceIntegrity(project, findings);
 
   for (const assignment of project.pendingAssignments) {
     const reviewer = findReviewer(project, assignment.reviewerId);

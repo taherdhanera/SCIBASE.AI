@@ -6,7 +6,10 @@ Self-contained Community & User Reputation System slice for
 The guard evaluates pending peer-review assignments before they affect profile
 reputation, badges, leaderboards, or project timelines. It checks reviewer
 capacity, weekly review hours, opt-outs, leave windows, rest periods, expertise
-match, early-career penalty risk, and recent review-credit concentration.
+match, early-career penalty risk, and recent review-credit concentration. It
+also fails closed on duplicate evidence identifiers, malformed temporal
+evidence, reversed availability windows, and future-dated assignment history so
+bad chronology cannot silently distort workload or concentration scoring.
 
 This is intentionally separate from broad reputation ledgers, endorsement rings,
 leaderboard eligibility, review civility, review timeliness scoring, recusal/COI,
