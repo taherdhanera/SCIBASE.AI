@@ -12,6 +12,8 @@ It adds a deterministic research-assistant review gate for external validity and
 - Whether runtime environments have reproducible rerun evidence.
 - Whether strong claims are missing required subgroup coverage.
 - Whether a broad transfer claim lacks external validation.
+- Whether claims contain unresolved or malformed evidence references.
+- Whether empty or malformed review packets fail closed instead of crashing.
 
 ## Outputs
 

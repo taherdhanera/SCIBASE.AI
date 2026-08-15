@@ -44,7 +44,11 @@ function addFinding(findings, severity, rule, message, action) {
 }
 
 function evaluateClaim(claim, evidence, manuscript) {
-  const linkedEvidence = evidence.filter((record) => claim.evidenceIds.includes(record.id));
+  const evidenceRecords = Array.isArray(evidence) ? evidence : [];
+  const evidenceIds = unique(Array.isArray(claim.evidenceIds) ? claim.evidenceIds : []);
+  const linkedEvidence = evidenceRecords.filter((record) => evidenceIds.includes(record.id));
+  const linkedEvidenceIds = new Set(linkedEvidence.map((record) => record.id));
+  const unresolvedEvidenceIds = evidenceIds.filter((id) => !linkedEvidenceIds.has(id));
   const findings = [];
   const scope = claim.assertedScope || {};
 
@@ -55,6 +59,16 @@ function evaluateClaim(claim, evidence, manuscript) {
       "missing-evidence",
       `Claim ${claim.id} has no linked evidence artifacts.`,
       "Link at least one dataset, runbook, protocol, or validation artifact before review."
+    );
+  }
+
+  if (unresolvedEvidenceIds.length > 0) {
+    addFinding(
+      findings,
+      linkedEvidence.length === 0 ? "critical" : "high",
+      "unresolved-evidence-links",
+      `Claim ${claim.id} references evidence artifacts that are not present: ${unresolvedEvidenceIds.join(", ")}.`,
+      "Repair or remove every unresolved evidence reference before the review packet is released."
     );
   }
 
@@ -151,7 +165,7 @@ function evaluateClaim(claim, evidence, manuscript) {
     id: claim.id,
     text: claim.text,
     score,
-    decision: decisionFromScore(score),
+    decision: linkedEvidence.length === 0 ? "quarantine-from-review-packet" : decisionFromScore(score),
     evidenceCount: linkedEvidence.length,
     observedScope: {
       populations: [...observedPopulations],
@@ -235,17 +249,21 @@ function createReproducibilityActions(claimReviews) {
 }
 
 function buildReviewPacket(project) {
-  const claimReviews = project.manuscript.claims.map((claim) =>
-    evaluateClaim(claim, project.evidence, project.manuscript)
+  const safeProject = project || {};
+  const manuscript = safeProject.manuscript || {};
+  const claims = Array.isArray(manuscript.claims) ? manuscript.claims : [];
+  const evidence = Array.isArray(safeProject.evidence) ? safeProject.evidence : [];
+  const claimReviews = claims.map((claim) =>
+    evaluateClaim(claim, evidence, manuscript)
   );
   const severitySummary = summarizeSeverity(claimReviews);
-  const averageScore = Math.round(
-    claimReviews.reduce((total, review) => total + review.score, 0) / claimReviews.length
-  );
+  const averageScore = claimReviews.length === 0
+    ? 0
+    : Math.round(claimReviews.reduce((total, review) => total + review.score, 0) / claimReviews.length);
 
   return {
-    projectId: project.id,
-    title: project.title,
+    projectId: safeProject.id || "unidentified-project",
+    title: safeProject.title || "Untitled research project",
     assistant: "external-validity-transfer-assistant",
     issue: "SCIBASE-AI/SCIBASE.AI#16",
     averageScore,
@@ -261,13 +279,25 @@ function buildReviewPacket(project) {
       }))
     ),
     reproducibilityActions: createReproducibilityActions(claimReviews),
-    researchGaps: createResearchGaps(project, claimReviews),
+    researchGaps: createResearchGaps({
+      corpusSignals: Array.isArray(safeProject.corpusSignals) ? safeProject.corpusSignals : [],
+      labCapabilities: Array.isArray(safeProject.labCapabilities) ? safeProject.labCapabilities : []
+    }, claimReviews),
     safetyNotes: [
       "Synthetic data only.",
       "No external APIs, credentials, private manuscripts, or live clinical data are used.",
       "The assistant produces deterministic review packets suitable for pre-submission review."
     ]
   };
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 function renderMarkdownReport(packet) {
@@ -330,7 +360,7 @@ function renderSvgSummary(packet) {
       const y = 130 + index * 52;
       const width = Math.max(10, review.score * 4);
       return [
-        `<text x="40" y="${y}" font-size="18" fill="#0f172a">${review.id}</text>`,
+        `<text x="40" y="${y}" font-size="18" fill="#0f172a">${escapeXml(review.id)}</text>`,
         `<rect x="40" y="${y + 12}" width="400" height="16" rx="4" fill="#e2e8f0"/>`,
         `<rect x="40" y="${y + 12}" width="${width}" height="16" rx="4" fill="#0f766e"/>`,
         `<text x="460" y="${y + 26}" font-size="16" fill="#334155">${review.score} - ${review.decision}</text>`
@@ -354,6 +384,7 @@ function renderSvgSummary(packet) {
 
 module.exports = {
   buildReviewPacket,
+  escapeXml,
   evaluateClaim,
   renderMarkdownReport,
   renderSvgSummary

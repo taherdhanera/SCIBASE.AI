@@ -1,6 +1,6 @@
 const assert = require("assert");
 const { project } = require("./sample-data");
-const { buildReviewPacket, evaluateClaim, renderMarkdownReport, renderSvgSummary } = require("./index");
+const { buildReviewPacket, escapeXml, evaluateClaim, renderMarkdownReport, renderSvgSummary } = require("./index");
 
 const packet = buildReviewPacket(project);
 
@@ -46,6 +46,35 @@ const emptyReview = evaluateClaim(emptyClaim, project.evidence, project.manuscri
 assert.strictEqual(emptyReview.decision, "quarantine-from-review-packet");
 assert.ok(emptyReview.findings.some((finding) => finding.rule === "missing-evidence"));
 
+const unresolvedReview = evaluateClaim(
+  {
+    id: "claim-broken-links",
+    text: "The model transfers to a community setting.",
+    assertedScope: { populations: ["adult"], settings: ["community hospital"] },
+    evidenceIds: ["external-adult-validation", "missing-validation-packet"],
+    confidence: "strong"
+  },
+  project.evidence,
+  project.manuscript
+);
+assert.ok(
+  unresolvedReview.findings.some((finding) => finding.rule === "unresolved-evidence-links"),
+  "missing referenced evidence should be an explicit blocking finding"
+);
+
+const malformedReview = evaluateClaim(
+  { id: "claim-malformed", text: "No evidence list was supplied.", assertedScope: {} },
+  null,
+  { requiredSubgroups: [] }
+);
+assert.strictEqual(malformedReview.decision, "quarantine-from-review-packet");
+assert.ok(malformedReview.findings.some((finding) => finding.rule === "missing-evidence"));
+
+const emptyPacket = buildReviewPacket({ id: "empty-project", manuscript: {} });
+assert.strictEqual(emptyPacket.averageScore, 0);
+assert.strictEqual(emptyPacket.decision, "quarantine-from-review-packet");
+assert.deepStrictEqual(emptyPacket.claimReviews, []);
+
 const markdown = renderMarkdownReport(packet);
 assert.ok(markdown.includes("## Claim Reviews"));
 assert.ok(markdown.includes("## Research Gap Prompts"));
@@ -53,5 +82,7 @@ assert.ok(markdown.includes("## Research Gap Prompts"));
 const svg = renderSvgSummary(packet);
 assert.ok(svg.includes("<svg"));
 assert.ok(svg.includes("External Validity Transfer Assistant"));
+assert.strictEqual(escapeXml('claim<&"\''), "claim&lt;&amp;&quot;&apos;");
+assert.ok(renderSvgSummary({ ...packet, claimReviews: [{ ...packet.claimReviews[0], id: "claim<unsafe>" }] }).includes("claim&lt;unsafe&gt;"));
 
 console.log("external-validity-transfer-assistant tests passed");
